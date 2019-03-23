@@ -2,6 +2,7 @@
 package com.nasageek.utexasutilities.activities;
 
 import android.os.Bundle;
+import android.util.Log;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -14,6 +15,8 @@ public class NutritionInfoActivity extends BaseActivity {
         super.onCreate(savedInstanceState);
         String url = getIntent().getExtras().getString("url");
         String title = getIntent().getExtras().getString("title");
+        String formData = getIntent().getExtras().getString("formData");
+        String summary = getIntent().getExtras().getString("summary");
         setupActionBar();
         actionBar.setTitle(title);
         final WebView wv = new WebView(this);
@@ -27,8 +30,13 @@ public class NutritionInfoActivity extends BaseActivity {
                 return false;
             }
         });
-
-        wv.loadUrl(url);
+        if(formData == null) {
+            wv.loadUrl(url);
+        } else {
+            Log.e("ERROR",formData);
+            wv.getSettings().setUseWideViewPort(false);
+            wv.postUrl(summary,formData.getBytes());
+        }
         setContentView(wv);
     }
 }

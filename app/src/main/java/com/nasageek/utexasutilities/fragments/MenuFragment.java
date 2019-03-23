@@ -1,17 +1,25 @@
 
 package com.nasageek.utexasutilities.fragments;
 
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.Fragment;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.Adapter;
 import android.widget.AdapterView;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -33,11 +41,15 @@ import com.squareup.otto.Subscribe;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class MenuFragment extends Fragment implements AdapterView.OnItemClickListener {
+public class MenuFragment extends Fragment implements AdapterView.OnItemClickListener, AdapterView.OnItemLongClickListener {
     private List<MyPair<String, List<Food>>> listOfLists = new ArrayList<>();
     private MenuAdapter menuAdapter;
     private AmazingListView foodListView;
@@ -47,7 +59,9 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
     private String restId;
     private String title;
     private String TASK_TAG;
+    private FloatingActionButton fb;
     private final UTilitiesApplication mApp = UTilitiesApplication.getInstance();
+    HashMap<String, Integer> selectedLinks = new HashMap<>();
 
     public static MenuFragment newInstance(String title, String restId) {
         MenuFragment f = new MenuFragment();
@@ -55,7 +69,6 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
         args.putString("title", title);
         args.putString("restId", restId);
         f.setArguments(args);
-
         return f;
     }
 
@@ -70,7 +83,30 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
         foodListView.setPinnedHeaderView(getActivity().getLayoutInflater().inflate(
                 R.layout.menu_header_item_view, foodListView, false));
         foodListView.setOnItemClickListener(this);
+        foodListView.setOnItemLongClickListener(this);
         foodListView.setAdapter(menuAdapter);
+        fb = vg.findViewById(R.id.getSummary);
+        fb.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent i = new Intent(getActivity(), NutritionInfoActivity.class);
+                i.putExtra("title", "Summary");
+                String overAllLink = "";
+                Calendar localCalendar = Calendar.getInstance(TimeZone.getDefault());
+                String date = localCalendar.get(Calendar.MONTH) + 1+"/"+localCalendar.get(Calendar.DAY_OF_MONTH)+"/"+localCalendar.get(Calendar.YEAR);
+                String FETCH_URL =
+                        "http://hf-food.austin.utexas.edu/foodpro/nutRpt.asp?locationNum=%s&dtdate=%s&mealName=%s";
+                // Special case for JCM, which combines Lunch and Dinner
+                if (restId.equals("05") && (title.equals("Lunch") || title.equals("Dinner"))) {
+                    overAllLink = String.format(FETCH_URL, restId, date,  "Lunch/Dinner");
+                } else {
+                    overAllLink = String.format(FETCH_URL, restId, date,  title);
+                }
+                i.putExtra("summary",overAllLink);
+                i.putExtra("formData",buildFormData());
+                startActivity(i);
+            }
+        });
         updateView(restId, false);
         return vg;
     }
@@ -86,7 +122,7 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
         }
         title = getArguments().getString("title");
         TASK_TAG = getClass().getSimpleName() + title;
-        menuAdapter = new MenuAdapter(getActivity(), listOfLists);
+        menuAdapter = new MenuAdapter(getActivity(), listOfLists, MenuFragment.this);
     }
 
     public void updateView(String restId, Boolean update) {
@@ -127,22 +163,92 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
 
         SharedPreferences sp = PreferenceManager
                 .getDefaultSharedPreferences(getActivity());
-        if (sp.getBoolean("embedded_browser", true)) {
-            Intent i = new Intent(getActivity(), NutritionInfoActivity.class);
-            i.putExtra("url", url);
-            i.putExtra("title", ((Food) parent.getItemAtPosition(position)).name);
-            startActivity(i);
-        } else {
-            Intent i = new Intent(Intent.ACTION_VIEW);
-            i.setData(Uri.parse(url));
-            startActivity(i);
-        }
+            if (sp.getBoolean("embedded_browser", true)) {
+                Intent i = new Intent(getActivity(), NutritionInfoActivity.class);
+                i.putExtra("url", url);
+                i.putExtra("title", ((Food) parent.getItemAtPosition(position)).name);
+                startActivity(i);
+            } else {
+                Intent i = new Intent(Intent.ACTION_VIEW);
+                i.setData(Uri.parse(url));
+                startActivity(i);
+            }
     }
+
+    @Override
+    public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id){
+        String url = "http://hf-food.austin.utexas.edu/foodpro/"
+                + ((Food) (parent.getItemAtPosition(position))).nutritionLink;
+        Dialog dialog = new Dialog(getActivity());
+        dialog.setContentView(R.layout.menu_dialog);
+        dialog.setTitle("");
+        dialog.show();
+        EditText tx = dialog.findViewById(R.id.quantityedit);
+        Integer quantity = selectedLinks.get(url);
+       if(quantity == null){
+           tx.setText("1");
+       }
+       else {
+           tx.setText(quantity.toString());
+       }
+       tx.requestFocus();
+        InputMethodManager inputMethodManager = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_FORCED, 0);
+        dialog.findViewById(R.id.ok).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                int x = Integer.parseInt(tx.getText().toString());
+                if(x == 0){
+                    selectedLinks.remove(url);
+                } else {
+                    selectedLinks.put(url,x);
+                }
+                if(selectedLinks.size() > 0){
+                    fb.show();
+                } else {
+                    fb.hide();
+                }
+                menuAdapter.notifyDataSetChanged();
+                InputMethodManager inputMethodManager = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                inputMethodManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0);
+                dialog.hide();
+            }
+        });
+        dialog.findViewById(R.id.cancel).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                InputMethodManager inputMethodManager = (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+                inputMethodManager.toggleSoftInput(InputMethodManager.HIDE_IMPLICIT_ONLY, 0);
+                dialog.hide();
+
+            }
+        });
+
+//        Log.e("CURRENT LIST",selectedLinks.toString());
+        return true;
+    }
+
+    public HashMap<String,Integer> getSelectedLinks() {
+        return selectedLinks;
+    }
+
+    public String buildFormData(){
+        String result = "";
+        for(String link : selectedLinks.keySet()){
+            String foodid = link.substring(link.indexOf("Port=")+5);
+            result += "recipe="+foodid+"&";
+            result += "QTY="+selectedLinks.get(link)+"&";
+        }
+        return result;
+    }
+
 
     static class FetchMenuTask extends TaggedAsyncTask<String, Integer, List<MyPair<String,List<Food>>>> {
         private String errorMsg;
+        Calendar localCalendar = Calendar.getInstance(TimeZone.getDefault());
+        String date = localCalendar.get(Calendar.MONTH) + 1+"/"+localCalendar.get(Calendar.DAY_OF_MONTH)+"/"+localCalendar.get(Calendar.YEAR);
         private final String FETCH_URL =
-                "http://hf-food.austin.utexas.edu/foodpro/pickMenu.asp?locationNum=%s&mealName=%s";
+                "http://hf-food.austin.utexas.edu/foodpro/pickMenu.asp?locationNum=%s&dtdate="+date+"&mealName=%s";
 
         public FetchMenuTask(String tag) {
             super(tag);
@@ -164,6 +270,8 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
                 location = String.format(FETCH_URL, restId, meal);
             }
 
+
+            Log.e("LOCATION",location);
             Request request = new Request.Builder()
                     .url(location)
                     .build();
@@ -260,7 +368,7 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
         }
     }
 
-     private void prepareToLoad() {
+    private void prepareToLoad() {
         progressLayout.setVisibility(View.VISIBLE);
         errorLayout.setVisibility(View.GONE);
         foodListView.setVisibility(View.GONE);
@@ -295,9 +403,10 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
     }
 
     static class MenuAdapter extends StickyHeaderAdapter<Food> {
-
-        public MenuAdapter(Context con, List<MyPair<String, List<Food>>> all) {
+        MenuFragment fragment;
+        public MenuAdapter(Context con, List<MyPair<String, List<Food>>> all, MenuFragment m) {
             super(con, all);
+            fragment = m;
         }
 
         @Override
@@ -306,10 +415,14 @@ public class MenuFragment extends Fragment implements AdapterView.OnItemClickLis
             if (res == null) {
                 res = LayoutInflater.from(mContext).inflate(R.layout.menu_item_view, parent, false);
             }
-
             TextView lName = (TextView) res.findViewById(R.id.lName);
-
             Food f = getItem(position);
+            if(fragment.getSelectedLinks().containsKey( "http://hf-food.austin.utexas.edu/foodpro/"
+                    +f.nutritionLink)){
+                res.setBackgroundColor(mContext.getResources().getColor(R.color.light_orange));
+            } else {
+                res.setBackgroundColor(Color.TRANSPARENT);
+            }
             lName.setText(f.name);
             return res;
         }

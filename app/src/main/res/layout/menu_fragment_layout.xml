@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent" >
 
@@ -7,6 +8,18 @@
             android:id="@+id/menu_progressbar_ll"
             layout="@layout/loading_content_layout"
             android:visibility="gone" />
+
+
+        <android.support.design.widget.FloatingActionButton
+            android:id="@+id/getSummary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="invisible"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="20dp"
+            android:elevation="6dp"
+            android:src="@drawable/ic_search_24dp"
+            app:backgroundTint="@color/burnt_orange" />
 
         <include
             android:id="@+id/menu_error"
@@ -18,4 +31,7 @@
             android:layout_height="match_parent"
             android:background="@android:color/transparent"
             android:cacheColorHint="@android:color/transparent" />
+
+
+
 </FrameLayout>
